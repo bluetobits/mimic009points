@@ -73,80 +73,92 @@ Switches are wired in a 4x4 matrix
  ![Circuit Diagram](Schematic.jpg) 
    
    Parts
-   Arduino uno, nano etc &  breakout board
-   USB TO  RS-485 module
-   RS-485 to UART module
-   PCA9685  PWM (servo driver) module
-   up to 16 x DPSTCO OR *DPDTCO toggle switches thre prototype uses the other half to LED indicate control was switched to JMRI.
-   up to 16 x servos
-   2 x 2k resistor
-   32 x 10K resistor
-   4 x 100K resistor
-   2 x 200R resistor
-   16 x 1N2007 diode or similar
-    5V DC 1A PSU for electronics
-   5V DC 2A PSU for servos & WS2812B LEDs (preferred to common PSU)
-   servo mounting hardware
-   servo knob (almost essential)
-   switch panel for mounting hardware
-   module mounting hardware
-   rotary encoder module
-   2 different colour LEDs
-   connecting wire
-   reset button
-    power jack socket
-    led strip WS2812B 2 LEDs per point
-    2 metres 2mm fibre optic light pipe for led to mimic
+  - Arduino uno, nano etc &  breakout board
+  - USB TO  RS-485 module
+  - RS-485 to UART module
+  - PCA9685  PWM (servo driver) module
+  - up to 16 x DPSTCO OR *DPDTCO toggle switches thre prototype uses the other half to LED indicate control was switched to JMRI.
+  - up to 16 x servos
+  - 2 x 2k resistor
+  - 32 x 10K resistor
+  - 4 x 100K resistor
+ -  2 x 200R resistor
+ -  16 x 1N2007 diode or similar
+ -   5V DC 1A PSU for electronics
+  - 5V DC 2A PSU for servos & WS2812B LEDs (preferred to common PSU)
+  - servo mounting hardware
+  - servo knob (almost essential)
+  - switch panel for mounting hardware
+  - module mounting hardware
+ -  rotary encoder module
+ -  2 different colour LEDs
+  - connecting wire
+  - reset button
+  -  power jack socket
+  -  led strip WS2812B 2 LEDs per point
+  -  2 metres 2mm fibre optic light pipe for led to mimic
  * *optional
 
     Arduino PIN connections
+   
     0 (TX) => RS-485 DI
+   
     1 (RX) => RS-485 RO
+   
     2 => RS-485 DE&RE (linked)
+   
     3 => Encoder DT
+   
     4 => Encoder CLK (reverse 3&4 if operation is backward)
+
     5 => Encoder push switch (to GND)
+   
     6 => switch matrix row 0 (sw0-3 point closed)
+   
     7 => switch matrix row 1 (sw4-7 point closed)
+   
     8 => switch matrix row 2 (sw8-11 point closed)
+   
     9 => switch matrix row 3 (sw12-15 point closed)
+   
     10 => PCA9685 OE(ENABLE)
+   
     11 => WS2812B LED strip Data in
+   
     12 => LED (PCA9685 ACTIVE - POINTS MOVING) via 200R resistor
+   
     13 => LED (CALIBRATING - ENCODER ACTIVE) via 200R resistor
-    A0 => switch matrix COL 0 (sw 0,4,8,12) 
-    A1 => switch matrix COL 1 (sw 1,5,9,13) 
+   
+    A0 => switch matrix COL 0 (sw 0,4,8,12)
+   
+    A1 => switch matrix COL 1 (sw 1,5,9,13)
+   
     A2 => switch matrix COL 2 (sw 2,6,10,14)
+   
     A3 => switch matrix COL 3 (sw 3,7,11,15)
+   
     A4 => PCA9685 SDA + 2K pullup resistor
+   
     A5 => PCA9685 SCL + 2K pullup resistor
+   
     A6 => NOT USED
+   
     A7 => NOT USED
+   
     RST => RESET PUSH SWITCH TO GROUND
+   
     GND => COMMON GROUND ALL SUPPLIES ALL MODULES
+   
     VCC => 5V REG INPUT, to encoder VCC, PCA9685 VCC
+
     RAW/IN =>ALTERNATIVE 6-12V INPUT
+   
     A suitable 5V servo supply is required.
 
 
     the sketch and hardware counts switches, channels and servos starting at 0
     (e.g. 16 switches numbered 0 to 15) the 1st channel is channel 0
 
-   Operation and features :
- * *points (turnouts) can be thrown/closed manually or from JMRI software using C/MRI over RS-485
-   The red light will extinguish after each power-up or reset when points have moved to
-      current switch positions
- * *point movement may be interrupted by switching the swtch at ant time
- * *switching a switch to the closed position will move the respective point to the
-       internally stored closed position for that point
-   switching a switch to the thrown position will move the respective point to the
-      internally stored thrown position for that point
- * *The internally stored thrown and closed positions can be adjusted in real time without reprogramming
- * *The servo motors are switched off between point movements to eliminate servo chatter.
- * *the point movement speed can be aj=djusted by changing MOVE_DELAY value from 12000 higher for slower and lower for faster
- * *changing INCREMENT from 10 higher will move points faster but less smooth, lower will be slower and smoother
-   The Arduino has only one serial port. ALL DEBUG flags must be set to 0 to allow RS-485 data.
- * *Advanced mode: There is no indication that the user has selected advanced mode other than "strange" behaviour. Press and hol
 
    CALIBRATING POINT POSITIONS
    to enter calibration, press and hold down the encoder button for around 3 seconds until the calibration LED lights steady.
