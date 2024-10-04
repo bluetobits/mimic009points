@@ -1,5 +1,5 @@
-# H1Model Railway Layout Control 
-# H3 Steve Lomax 2021 not for commercial use. 
+## Model Railway Layout Control 
+# Steve Lomax 2021 not for commercial use. 
 Adafruit acknowledgement below
 
 please acknowledge author if redistributing or modifying
