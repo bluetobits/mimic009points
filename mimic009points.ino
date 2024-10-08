@@ -15,17 +15,17 @@
 //
 
 // SWITCHING DATA CHANGE ALL CAPITALISED VALUES TO SUIT
-const uint8_t NO_OF_POINTS = 16;         // no of szwitches / points on the switch panel
-const uint8_t ROW_PINS[] = { 6, 7, 8, 9 };        //Arduino pin numbers for output switch Matrix
-const uint8_t NO_OF_ROWS = 4;           //the number of rows the switches are matrix wired (see schematic)
+const uint8_t NO_OF_POINTS = 16;                // no of szwitches / points on the switch panel
+const uint8_t ROW_PINS[] = { 6, 7, 8, 9 };      //Arduino pin numbers for output switch Matrix
+const uint8_t NO_OF_ROWS = 4;                   //the number of rows the switches are matrix wired (see schematic)
 const uint8_t COL_PINS[] = { A0, A1, A2, A3 };  //Arduino pin numbers for analog input switch Matrix
-const uint8_t NO_OF_COLS = 4;           //the number of columns the switches are matrix wired (see schematic)
+const uint8_t NO_OF_COLS = 4;                   //the number of columns the switches are matrix wired (see schematic)
 const int8_t POINT_PAIRS[] = { 0, 1, 2, 3, 4, 5, 6, -6, 8,
-                              8, 8, 11, -11, 13, 14, 15 };  
-  // change the number in point number position. read notes above.
-const int TOP_PULSE_LEN = 2400;         // setting the maximum cw servo position(actual = 2500 but not all servos are the same)
-const int BOTTOM_PULSE_LEN = 600;       //setting the minimum ccw servo position
-bool pointPairing = 0;                  // Global pairing slave points with master points
+                               8, 8, 11, -11, 13, 14, 15 };
+// change the number in point number position. read notes above.
+const int TOP_PULSE_LEN = 2400;    // setting the maximum cw servo position(actual = 2500 but not all servos are the same)
+const int BOTTOM_PULSE_LEN = 600;  //setting the minimum ccw servo position
+bool pointPairing = 0;             // Global pairing slave points with master points
 const uint8_t NO_OF_LEDS = 32;
 //const uint8_t NO_OF_BLOCKS = 4;
 //const uint8_t NO_OF_SENS = 4;
@@ -256,7 +256,7 @@ void pointMoveSpeed() {
         longPress = 1;
         digitalWrite(CAL_LED, 0);
       }
-       //wdt_reset();  // Reset watchdog to prevent reset
+      //wdt_reset();  // Reset watchdog to prevent reset
     }
     if (longPress) {
       savePointValues();
@@ -270,15 +270,16 @@ void pointMoveSpeed() {
 
 //----------------------- PRINT DATA FOR DEBUGGING -------------------
 void printOutData() {
+  printf("\n");
   for (int i = 0; i < NO_OF_POINTS; i++) {
     if (i < 10) {
       printf("  P%d ", i);
     } else {
       printf(" P%d", i);
     }
-    if (point[i].curPos != point[i].closedPos || point[i].curPos != point[i].thrownPos) {
-      printf("   point %d is moving to %d ", i, point[i].curPos);
-    }
+    // if (point[i].curPos != point[i].closedPos || point[i].curPos != point[i].thrownPos) {
+    //   printf("   point %d is moving to %d ", i, point[i].curPos);
+    // }
   }
   printf("\n");
   for (int i = 0; i < NO_OF_POINTS; i++) {
@@ -298,12 +299,22 @@ send 16 bits of point data
 s
 */
 void getSetData() {
+  int oldincoming = incoming;
   cmri.process();                           // get JMRI data via CMRI bits
   for (int i = 0; i < NO_OF_POINTS; i++) {  // just using 16 outputs
     incoming |= cmri.get_bit(i) << i;       // get new incoming status for point positions
     cmri.set_bit(i, point[i].swPos);        //set CMRI bits
   }
+  if (oldincoming != incoming){
+
+    Serial.print ("\nincoming = ");
+    Serial.println (incoming, BIN);
+    Serial.print ("outgoing = ");
+    Serial.println (swStatus, BIN);
+  }
+
 }
+
 
 // ============================ SET LEDS ==============================
 void setLeds() {
@@ -429,14 +440,14 @@ void calibrate() {
       //OVERRIDING POINT PAIRING BY 3 FAST ENCODER PRESSES WHEN NOT CALIBRATING
       // //toggle point pairing and write to eeprom. Only possible if not calibrating.
       // //checking for a further 3 fast press/release within 3 seconds
-      while (millis() < timepressed + LONG_PUSH/2) {         // 1.5 seconds - can't be a long press
+      while (millis() < timepressed + LONG_PUSH / 2) {     // 1.5 seconds - can't be a long press
         if (digitalRead(ENCODER_PUSH) == 0) pressCount++;  //count a press
         while (digitalRead(ENCODER_PUSH) == 0) {
           //  wdt_reset();  // Reset watchdog to prevent reset
-        }          //wait for release
-        delay(100);   
+        }  //wait for release
+        delay(100);
         //  wdt_reset();  // Reset watchdog to prevent reset                                     //debounce
-      }                                                    // loop back for next fast press if there is time
+      }  // loop back for next fast press if there is time
 
       if (pressCount >= 2) {
         longPress = 0;  // just to be sure!
@@ -465,10 +476,12 @@ void calibrate() {
   }
   if (cal) {  // at any time
 
+    static uint8_t pointNum;
     int32_t move = (encoder.read() - encoderPos);            //current value - old value
     if (move != 0 || oldLastPointMoved != lastPointMoved) {  //there has been an encoder move since last pass (could be -ve) or new point switched
-      encoder.write(0);                                      // reset encoder
-      uint8_t pointNum;                                      // this is the point number extracted from lastPointMoved
+      move *= 4;
+      encoder.write(0);  // reset encoder
+                         // this is the point number extracted from lastPointMoved
 
       if (lastPointMoved >= NO_OF_POINTS) {        // this is a point set at thrown
         pointNum = lastPointMoved - NO_OF_POINTS;  // taking 16 of this number
@@ -489,6 +502,12 @@ void calibrate() {
       }
       oldLastPointMoved = lastPointMoved;
     }
+
+    if (point[pointNum].curPos == BOTTOM_PULSE_LEN || point[pointNum].curPos == TOP_PULSE_LEN) {
+      digitalWrite(CAL_LED, flash);
+    } else {
+      digitalWrite(CAL_LED, 1);
+    }
   }
 }
 
@@ -501,6 +520,7 @@ void setup() {
   servo.begin();
   servo.setPWMFreq(50);
   yield();
+
 
   printf("\nmimic009popints Steve Lomax 03/10/24 Free for personal use.\n");
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NO_OF_LEDS);
@@ -521,16 +541,14 @@ void setup() {
 
   bool validation = true;
   if (moveSpeed < 1) {
-    moveSpeed = 100;
+    moveSpeed = 1;
     validation = 0;
   }
-  
-
   for (int i = 0; i < NO_OF_POINTS; i++) {
     if (point[i].thrownPos < BOTTOM_PULSE_LEN || point[i].thrownPos > TOP_PULSE_LEN) {
       point[i].thrownPos = 2000;
       validation = false;
-    }                          
+    }
     if (point[i].closedPos < BOTTOM_PULSE_LEN || point[i].closedPos > TOP_PULSE_LEN) {
       point[i].closedPos = 2000;
       validation = false;
@@ -538,6 +556,14 @@ void setup() {
   }
   if (!validation) {
     savePointValues();
+  }
+  readSwitches();
+  for (int i = 0; i < NO_OF_POINTS; i++) {
+    if (point[i].swPos == 1) {
+      point[i].curPos = point[i].thrownPos;
+    } else {
+      point[i].curPos = point[i].closedPos;
+    }
   }
 
   digitalWrite(CAL_LED, 0);
@@ -563,13 +589,13 @@ void setup() {
   Serial.end();
   delay(1000);
   bus.begin(19200);
-  
+
 
   while (digitalRead(ENCODER_PUSH) == 0) {}
 
   // Enable watchdog with a 2-second timeout
   // wdt_enable(WDTO_2S);
- // Wire.begin();
+  // Wire.begin();
 }
 
 
@@ -581,8 +607,15 @@ void loop() {
   // wdt_reset();  // Reset watchdog to prevent reset
   //testLeds();
   //timeNow = millis();
-
+  if (oldswStatus != swStatus) {
+    printOutData();
+  }
   readSwitches();
+
+  if (oldswStatus != swStatus) {
+    printOutData();
+    oldswStatus = swStatus;
+  }
   //printTimeVars();
 
   if (!cal) {
@@ -599,10 +632,7 @@ void loop() {
     pointMoveSpeed();
   }
 
-  if (oldswStatus != swStatus) {
-    printOutData();
-    oldswStatus = swStatus;
-  }
+
 
   setLeds();
 }
