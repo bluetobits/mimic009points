@@ -300,6 +300,7 @@ s
 */
 void getSetData() {
   int oldincoming = incoming;
+  incoming = 0;
   cmri.process();                           // get JMRI data via CMRI bits
   for (int i = 0; i < NO_OF_POINTS; i++) {  // just using 16 outputs
     incoming |= cmri.get_bit(i) << i;       // get new incoming status for point positions
@@ -511,6 +512,41 @@ void calibrate() {
   }
 }
 
+//==================================== I2C =====================////
+void i2cReadWrite() {
+
+  Wire.beginTransmission(slaveAddress);
+  i2cError = Wire.endTransmission();  // Check for errors
+  if (i2cError == 0) {
+    Wire.requestFrom(slaveAddress, 4);  // Request 16 bits for sensors from Arduino and 16 JMRI point settings
+    unsigned long startTime = millis();
+    while (Wire.available() < 4) {        // Wait for data, with timeout
+      if (millis() - startTime > 1000) {  // 1-second timeout
+        Serial.println("Timeout waiting for slave response.");
+        return;  // Exit the function to avoid hanging
+      }
+    }
+
+    // Read incoming data if available
+    incomingSensors = Wire.read() << 8 | Wire.read();
+    incoming = Wire.read() << 8 | Wire.read();
+
+    // Now send data to the slave
+    delay(100);  // Optional, depends on system timing requirements
+    Wire.beginTransmission(slaveAddress);
+    Wire.write(highByte(swStatus));     // Send high byte
+    Wire.write(lowByte(swStatus));      // Send low byte
+    i2cError = Wire.endTransmission();  // Check for errors
+
+    if (i2cError != 0) {
+      Serial.print("Error writing to slave. I2C Error code: ");
+      Serial.println(i2cError);
+    }
+  } else {
+    Serial.print("Error communicating with slave. I2C Error code: ");
+    Serial.println(i2cError);
+  }
+}
 
 //==========================================================================
 //===================== SETUP ==============================================
@@ -623,7 +659,10 @@ void loop() {
     for (int i = 0; i < NO_OF_POINTS; i++) {
       point[i].movePoint(i);
     }
-    if (!moving) getSetData();
+    if (!moving){
+      getSetData();
+      //i2cReadWrite();
+    }
   }
 
   if (!changeMoveSpeed) {
