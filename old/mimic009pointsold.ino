@@ -84,7 +84,7 @@ const uint8_t CAL_LED = 12;    // LED to denote in calibration mode
 const uint8_t DATA_PIN = 11;   // neopixels data connect from here via 50 ohm resistor
 const int LONG_PUSH = 3000;    // the "long push" duration of encoder button
 bool changeMoveSpeed = false;  // flag to idnicate push is held in from startup
-bool centreServo = false;
+
 //Initialisation
 CRGB leds[NO_OF_LEDS];  //LED neopixel strip
 Adafruit_PWMServoDriver servo = Adafruit_PWMServoDriver();
@@ -264,7 +264,7 @@ void pointMoveSpeed() {
       loadPointValues();
     }
     changeMoveSpeed = false;
-    digitalWrite(CAL_LED, 0);
+    digitalWrite(CAL_LED, 1);
   }
 }
 
@@ -306,13 +306,14 @@ void getSetData() {
     incoming |= cmri.get_bit(i) << i;       // get new incoming status for point positions
     cmri.set_bit(i, point[i].swPos);        //set CMRI bits
   }
-  if (oldincoming != incoming) {
+  if (oldincoming != incoming){
 
-    Serial.print("\nincoming = ");
-    Serial.println(incoming, BIN);
-    Serial.print("outgoing = ");
-    Serial.println(swStatus, BIN);
+    Serial.print ("\nincoming = ");
+    Serial.println (incoming, BIN);
+    Serial.print ("outgoing = ");
+    Serial.println (swStatus, BIN);
   }
+
 }
 
 
@@ -375,15 +376,6 @@ void setLeds() {
         //printf("ledsMimic number thrown for point = %d is %d\n", lastPointMoved-NO_OF_POINTS, LEDS_MIMIC[ledatlpm]);
       }
     }
-    if (centreServo) {
-      int ledatlpm = lastPointMoved * 2;
-      uint8_t CSLev = flash * 200;
-      if (lastPointMoved >= NO_OF_POINTS) {
-        ledatlpm = ((lastPointMoved - NO_OF_POINTS) * 2);
-      }
-      leds[LEDS_MIMIC[ledatlpm]] = CHSV(60, onSat, CSLev);      // YELLOW
-      leds[LEDS_MIMIC[ledatlpm + 1]] = CHSV(60, onSat, CSLev);  // YELLOW
-    }
   }
   // byte sensStarti = NO_OF_POINTS * 2;
   // for (uint8_t i = sensStarti; i < NO_OF_LEDS; i++) {
@@ -437,7 +429,6 @@ void calibrate() {
 
   if (digitalRead(ENCODER_PUSH) == 0) {  // it's a press
     unsigned long timepressed = millis();
-    pressCount++;
     while (digitalRead(ENCODER_PUSH) == 0) {
       if (millis() - timepressed > LONG_PUSH) {  // long press
         longPress = 1;
@@ -458,34 +449,15 @@ void calibrate() {
         delay(100);
         //  wdt_reset();  // Reset watchdog to prevent reset                                     //debounce
       }  // loop back for next fast press if there is time
-      switch (pressCount) {
-        case 4:
-          changeMoveSpeed = true;
-          printf("pressCount = %d, changing servo move speed from  %d\n", pressCount, moveSpeed);
-          break;
-        case 3:
-          centreServo = true;
-          printf("pressCount = %d, changing servo centering to  %d\n", pressCount, centreServo);
-          break;
-        case 2:
-          pointPairing = !pointPairing;
-          printf("pressCount = %d, changing pointPairing to %d\n", pressCount, pointPairing);
-          savePointValues();  // should only write pointPairing as no point calibration positions have changed.
-          break;
-        default:
-          changeMoveSpeed = false;
-          centreServo = false;
-          break;
-      }
 
-      // if (pressCount >= 2) {
-      //   longPress = 0;  // just to be sure!
-      //   // if (pressCount >= 5) while(true){}//reset using watchdog
-      //   printf("pressCount = %d, changing pointPairing from %d to ", pressCount, pointPairing);
-      //   pointPairing = !pointPairing;
-      //   printf(" %d\n", pointPairing);
-      //   savePointValues();  // should only write pointPairing as no point calibration positions have changed.
-      // }
+      if (pressCount >= 2) {
+        longPress = 0;  // just to be sure!
+        // if (pressCount >= 5) while(true){}//reset using watchdog
+        printf("pressCount = %d, changing pointPairing from %d to ", pressCount, pointPairing);
+        pointPairing = !pointPairing;
+        printf(" %d\n", pointPairing);
+        savePointValues();  // should only write pointPairing as no point calibration positions have changed.
+      }
       //printf("pressCount = %d, pointPairing = %d\n", pressCount, pointPairing);
       if (longPress) {  // start calibrating
         cal = 1;
@@ -539,28 +511,6 @@ void calibrate() {
     }
   }
 }
-
-//================================= setServoCentre ========================================
-
-void setServoCentre() {
-
-  int lpm = lastPointMoved;
-  if (lastPointMoved >= NO_OF_POINTS) {
-    lpm = ((lastPointMoved - NO_OF_POINTS));
-  }
-  for (int i = 0; i < NO_OF_POINTS; i++) {
-    if (i == lpm) {
-      servo.writeMicroseconds(lpm, 1500);  //move servo
-      point[lpm].curPos = 1500;
-      printf("Centering point %d\n", lpm);
-    } else {
-      point[i].movePoint(i);
-    }
-  }
-  
-  // }
-}
-
 
 //==================================== I2C =====================////
 void i2cReadWrite() {
@@ -704,14 +654,13 @@ void loop() {
     oldswStatus = swStatus;
   }
   //printTimeVars();
-  if (centreServo) {  //if in centre servo mode(enc pressed 4 times)
-    setServoCentre();
-  } else if (!cal) {
+
+  if (!cal) {
     moving = 0;
     for (int i = 0; i < NO_OF_POINTS; i++) {
       point[i].movePoint(i);
     }
-    if (!moving) {
+    if (!moving){
       getSetData();
       //i2cReadWrite();
     }
