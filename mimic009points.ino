@@ -9,6 +9,24 @@
 #include <CMRI.h>
 #include <Auto485.h>
 #include <avr/wdt.h>
+
+#define DEBUG 1
+#if DEBUG == 1
+#define debug(x) Serial.print(x)
+#define debugln(x) Serial.println(x)
+#define debugf(x) printf(x)
+#define debugf1(x, y) printf(x, y)
+#define debugf2(x, y, z) printf(x, y, z)
+#define debugf3(x, y, z, w) printf(x, y, z, w)
+#else
+#define debug(x)
+#define debugln(x)
+#define debugf(x)
+#define debugf1(x, y)
+#define debugf2(x, y, z)
+#define debugf3(x, y, z, w)
+#endif
+
 // pointPairing The master point of a point pair must be the point with the lower point number
 // the pointPairs position is the actual point, the number is the point that controls it.
 // multiple points can be controlled by 1 point, a negative number indicated the slave point is inverter.
@@ -71,7 +89,7 @@ int oldLastPointMoved = 0;       // Global. previuous point calibrated
 //JMRI  and RS485 connections
 const int CMRI_ADDRESS = 0;  // node address
 const uint8_t DE_PIN = 2;    //Pin for RS485 DE & RE connected together
-int incoming = 0;
+uint16_t incoming = 0;
 byte incomingSensors;
 // bits from JMRI data
 byte slaveAddress = 8;
@@ -115,7 +133,7 @@ struct Points {  // each point has these properties and method
   int closedPos = 1000;
   int thrownPos = 2000;
   int curPos = 1000;
-  bool swPos = 1;
+  bool swPos = 0;
   bool autoControl = 0;  // from JMRI
 
   void movePoint(int index) {
@@ -171,20 +189,10 @@ void loadPointValues() {
   }
 }
 
-void printTimeVars() {
-  Serial.print("   millis = ");
-  Serial.print(millis());
-  Serial.print(".   timeNow = ");
-  Serial.print(timeNow);
-  Serial.print(".   flashTimeNow = ");
-  Serial.print(flashTimeNow);
-  Serial.print(".   FlashTimeout = ");
-  Serial.println(flashTimeout);
-}
-
 
 //============================== READ SWITCH POSITIONS =================
 void readSwitches() {
+  cmri.process(); 
   swStatus = 0;  // Clear previous value
 
   for (int row = 0; row < NO_OF_ROWS; row++) {    // iterate through all 4 switch rows.
@@ -202,8 +210,6 @@ void readSwitches() {
         //printf ("point number %d  is paired with = %d and is set to %d\n",i,pointPairs[i],point[i].swPos );
 
       } else {
-
-
         point[i].autoControl = 0;
         if (swIn < 300) {  // switch close to ground and therefore thrown
           //printf("i = %d, swIn = %d\n", i, swIn);
@@ -211,12 +217,14 @@ void readSwitches() {
         } else if (swIn >= 300 && swIn < 600) {  //switch in mid position therefore closed
           point[i].swPos = 0;
         } else if (swIn > 600) {                 // switch is opposite thrown and therefore under computer control
-          point[i].swPos = (incoming >> i) & 1;  // set to incoming CMRI/JMRI position
+          //point[i].swPos = (incoming >> i) & 1;  // set to incoming CMRI/JMRI position
+          point[i].swPos = cmri.get_bit(i);
           point[i].autoControl = 1;
         }
         // if (swIn < 10) printf(" ");
         // if (swIn < 100) printf(" ");
         // printf("%d %d ", swIn, point[i].curPos);
+        if (i > 12) point[i].swPos = 0;
       }
       if (curPointStatus != point[i].swPos) {                // if it has changed
         lastPointMoved = i;                                  // note number of last point moved
@@ -225,7 +233,8 @@ void readSwitches() {
         //printf(" row %d, Col %d, index %d, value %d\n ",row,col,i,swIn);
       }
       //printf("%d at row %d, col %d\n",point[i].swPos,row,col);
-      swStatus = swStatus + (point[i].swPos << i);  // convienient place to generate the
+      swStatus = swStatus + (point[i].swPos << i);  // convienient place to generate the swStatus
+      cmri.set_bit(i, point[i].swPos);              //convienient place to update cmri
     }
     digitalWrite(ROW_PINS[row], LOW);
   }
@@ -239,11 +248,11 @@ void pointMoveSpeed() {
   digitalWrite(CAL_LED, flash);
   if (encoderPos > 3) {
     moveSpeed++;
-    printf("move speed = %d\n", moveSpeed);
+    debugf1("move speed = %d\n", moveSpeed);
     encoder.write(0);
   } else if (encoderPos < -3) {
     if (moveSpeed > 0) moveSpeed--;
-    printf("move speed = %d\n", moveSpeed);
+    debugf1("move speed = %d\n", moveSpeed);
     encoder.write(0);
   }
 
@@ -270,48 +279,58 @@ void pointMoveSpeed() {
 
 //----------------------- PRINT DATA FOR DEBUGGING -------------------
 void printOutData() {
-  printf("\n");
+  debugf("\n");
+
+  //print header
   for (int i = 0; i < NO_OF_POINTS; i++) {
     if (i < 10) {
-      printf("  P%d ", i);
+      debugf1("  P%d", i);
     } else {
-      printf(" P%d", i);
+      debugf1(" P%d", i);
     }
-    // if (point[i].curPos != point[i].closedPos || point[i].curPos != point[i].thrownPos) {
-    //   printf("   point %d is moving to %d ", i, point[i].curPos);
-    // }
   }
-  printf("\n");
+  //print switch positions under header
+  debugf("\n");
   for (int i = 0; i < NO_OF_POINTS; i++) {
-    printf("  %d  ", point[i].swPos);
+    debugf1("  %d ", point[i].swPos);
   }
-  int temp = lastPointMoved / 2 + lastPointMoved % 2;
-  printf(" last point moved = %d ", lastPointMoved);
-  printf("\n");
+  // last point moved is a  32 bit number.
+  //the 1st 16 bits LOW SB  represent the point number if it was a closed position
+  //the 2nd 16 bits HIGH SB represent the point number if it was a thrown position
+  int temp = lastPointMoved / 2 + lastPointMoved % 2;  // converts to decimal point numbers 0-15 closed, 16-31 thrown
+  debugf1(" last point moved = %d \n", lastPointMoved);
 }
 
-//=========================== GET & SET DATA FROM JMRI/CMRI==================
-/*
-connect to 2nd "Slave" Arduino over I2C
-request 16 bits of sensor data
-send 16 bits of point data
+//=========================== bit print ==================
 
-s
-*/
+void bitPrint(int tdata) {
+  for (int i = 0; i < 16; i++) {
+    debug((tdata >> i) & 1 == 1 ? "1" : "0");  // will reverse bit order!
+  }
+  debugln();
+}
+//=========================== GET & SET DATA FROM JMRI/CMRI==================
+
 void getSetData() {
   int oldincoming = incoming;
   incoming = 0;
-  cmri.process();                           // get JMRI data via CMRI bits
+
+  cmri.process();  // get JMRI data via CMRI bits
+
+
   for (int i = 0; i < NO_OF_POINTS; i++) {  // just using 16 outputs
     incoming |= cmri.get_bit(i) << i;       // get new incoming status for point positions
-    cmri.set_bit(i, point[i].swPos);        //set CMRI bits
+    //cmri.set_bit(i, point[i].swPos);        //set CMRI bits+
   }
+
   if (oldincoming != incoming) {
 
-    Serial.print("\nincoming = ");
-    Serial.println(incoming, BIN);
-    Serial.print("outgoing = ");
-    Serial.println(swStatus, BIN);
+    debug("\ncurrent  from JMRI= ");
+    bitPrint(oldincoming);
+    debug("outgoing  to  JMRI= ");
+    bitPrint(swStatus);
+    debug("incoming from JMRI= ");
+    bitPrint(incoming);
   }
 }
 
@@ -407,7 +426,10 @@ void setLeds() {
 //--------------------------LED TESTING FOR DEBUGGING-------------------
 void testLeds() {
 
-  for (int i = 0; i < NO_OF_POINTS; i++) {
+  for (int i = 0; i < NO_OF_POINTS; i++) 
+  
+  
+  {
     int neoNum = 2 * i;
     leds[LEDS_MIMIC[neoNum]] = CHSV(160, onSat, 0);
     leds[LEDS_MIMIC[neoNum + 1]] = CHSV(160, onSat, 0);
@@ -419,7 +441,7 @@ void testLeds() {
     leds[LEDS_MIMIC[neoNum]] = CHSV(64, 255, 250);
     leds[LEDS_MIMIC[neoNum + 1]] = CHSV(128, 255, 250);
 
-    printf("i = %d", i);
+    debugf1("i = %d", i);
 
     // if (i != 0) {
     //   leds[i - 1] = CHSV(160, 255, 150);
@@ -461,15 +483,15 @@ void calibrate() {
       switch (pressCount) {
         case 4:
           changeMoveSpeed = true;
-          printf("pressCount = %d, changing servo move speed from  %d\n", pressCount, moveSpeed);
+          debugf2("pressCount = %d, changing servo move speed from  %d\n", pressCount, moveSpeed);
           break;
         case 3:
           centreServo = true;
-          printf("pressCount = %d, changing servo centering to  %d\n", pressCount, centreServo);
+          debugf2("pressCount = %d, changing servo centering to  %d\n", pressCount, centreServo);
           break;
         case 2:
           pointPairing = !pointPairing;
-          printf("pressCount = %d, changing pointPairing to %d\n", pressCount, pointPairing);
+          debugf2("pressCount = %d, changing pointPairing to %d\n", pressCount, pointPairing);
           savePointValues();  // should only write pointPairing as no point calibration positions have changed.
           break;
         default:
@@ -478,15 +500,6 @@ void calibrate() {
           break;
       }
 
-      // if (pressCount >= 2) {
-      //   longPress = 0;  // just to be sure!
-      //   // if (pressCount >= 5) while(true){}//reset using watchdog
-      //   printf("pressCount = %d, changing pointPairing from %d to ", pressCount, pointPairing);
-      //   pointPairing = !pointPairing;
-      //   printf(" %d\n", pointPairing);
-      //   savePointValues();  // should only write pointPairing as no point calibration positions have changed.
-      // }
-      //printf("pressCount = %d, pointPairing = %d\n", pressCount, pointPairing);
       if (longPress) {  // start calibrating
         cal = 1;
         encoderPos = 0;    // reset
@@ -519,7 +532,7 @@ void calibrate() {
         if (point[pointNum].thrownPos > TOP_PULSE_LEN) point[pointNum].thrownPos = TOP_PULSE_LEN;
         servo.writeMicroseconds(pointNum, point[pointNum].thrownPos);
         point[pointNum].curPos = point[pointNum].thrownPos;
-        printf("Cal point %d : thrown pos = %d \n", pointNum, point[pointNum].thrownPos);
+        debugf2("Cal point %d : thrown pos = %d \n", pointNum, point[pointNum].thrownPos);
       } else {                      //otherwise this is a point set at closed
         pointNum = lastPointMoved;  // not taking 16 of this number
         point[pointNum].closedPos += move;
@@ -527,7 +540,7 @@ void calibrate() {
         if (point[pointNum].closedPos > TOP_PULSE_LEN) point[pointNum].closedPos = TOP_PULSE_LEN;
         servo.writeMicroseconds(pointNum, point[pointNum].closedPos);
         point[pointNum].curPos = point[pointNum].closedPos;
-        printf("Cal point %d : closed pos = %d \n", pointNum, point[pointNum].closedPos);
+        debugf2("Cal point %d : closed pos = %d \n", pointNum, point[pointNum].closedPos);
       }
       oldLastPointMoved = lastPointMoved;
     }
@@ -552,12 +565,12 @@ void setServoCentre() {
     if (i == lpm) {
       servo.writeMicroseconds(lpm, 1500);  //move servo
       point[lpm].curPos = 1500;
-      printf("Centering point %d\n", lpm);
+      debugf1("Centering point %d\n", lpm);
     } else {
       point[i].movePoint(i);
     }
   }
-  
+
   // }
 }
 
@@ -572,7 +585,7 @@ void i2cReadWrite() {
     unsigned long startTime = millis();
     while (Wire.available() < 4) {        // Wait for data, with timeout
       if (millis() - startTime > 1000) {  // 1-second timeout
-        Serial.println("Timeout waiting for slave response.");
+        debug("Timeout waiting for slave response.");
         return;  // Exit the function to avoid hanging
       }
     }
@@ -589,12 +602,12 @@ void i2cReadWrite() {
     i2cError = Wire.endTransmission();  // Check for errors
 
     if (i2cError != 0) {
-      Serial.print("Error writing to slave. I2C Error code: ");
-      Serial.println(i2cError);
+      debug("Error writing to slave. I2C Error code: ");
+      debugln(i2cError);
     }
   } else {
-    Serial.print("Error communicating with slave. I2C Error code: ");
-    Serial.println(i2cError);
+    debug("Error communicating with slave. I2C Error code: ");
+    debugln(i2cError);
   }
 }
 
@@ -691,29 +704,28 @@ void setup() {
 //===================== LOOP ===============================================
 //==========================================================================
 void loop() {
-  // wdt_reset();  // Reset watchdog to prevent reset
-  //testLeds();
-  //timeNow = millis();
-  if (oldswStatus != swStatus) {
-    printOutData();
-  }
+  // if (oldswStatus != swStatus) {
+  //   Serial.println("\nfirst call");
+  //   printOutData();
+  // }
   readSwitches();
-
-  if (oldswStatus != swStatus) {
-    printOutData();
-    oldswStatus = swStatus;
+  if (DEBUG) {
+    if (oldswStatus != swStatus) {
+      printOutData();
+      oldswStatus = swStatus;
+    }
   }
   //printTimeVars();
   if (centreServo) {  //if in centre servo mode(enc pressed 4 times)
     setServoCentre();
   } else if (!cal) {
-    moving = 0;
-    for (int i = 0; i < NO_OF_POINTS; i++) {
-      point[i].movePoint(i);
-    }
     if (!moving) {
       getSetData();
       //i2cReadWrite();
+    }
+    moving = 0;
+    for (int i = 0; i < NO_OF_POINTS; i++) {
+      point[i].movePoint(i);
     }
   }
 
@@ -722,8 +734,6 @@ void loop() {
   } else {
     pointMoveSpeed();
   }
-
-
 
   setLeds();
 }
